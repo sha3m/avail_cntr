@@ -2,11 +2,11 @@ import pandas as pd
 import datetime
 
 chunksize = 100000
-availability_status = "In Stock" # or "Out of Stock", or "Not Listed", etc.
 filename = 'small_sample.csv'
 
 chunks = pd.read_csv(filename, chunksize=chunksize)
-summary = pd.DataFrame(columns=['ID', 'Report Date', 'Last Available', 'Availability', 'Title', 'RPC', 'Market', 'Store'])
+summary = pd.DataFrame(columns=['ID', 'Report Date', 'Last Available', 'In Stock', 'Out of Stock', 'Not Listed', 'RPC',
+                                'Description', 'Sub Category', 'Market', 'Store', 'Dimension7', 'Dimension8'])
 
 for chunk in chunks:
     for index, row in chunk.iterrows():
@@ -22,10 +22,8 @@ for chunk in chunks:
             row['Report Date'] = dates
 
             if row['AVAILABILITY'] == "In Stock":
-                if (r['Last Available'].values[0] == "") or (datetime.datetime.strptime(r['Last Available'].values[0], '%Y-%m-%d') < \
-                        datetime.datetime.strptime(row['REPORT_DATE'], '%Y-%m-%d')):
+                if (r['Last Available'].values[0] == "") or (datetime.datetime.strptime(r['Last Available'].values[0], '%Y-%m-%d') < datetime.datetime.strptime(row['REPORT_DATE'], '%Y-%m-%d')):
                     r['Last Available'].values[0] = row['REPORT_DATE']
-            #elif row['AVAILABILITY'] == "Out of Stock":
 
             summary.loc[summary['ID'] == ID] = r
 
@@ -42,19 +40,27 @@ for chunk in chunks:
                 }
             ],
             'Last Available': la,
-            'Availability': 0,
-            'Title': row['TRUSTED_PRODUCT_DESCRIPTION'],
+            'In Stock': 0,
+            'Out of Stock': 0,
+            'Not Listed': 0,
             'RPC': row['TRUSTED_RPC'],
+            'Description': row['TRUSTED_PRODUCT_DESCRIPTION'],
+            'Sub Category': row['SUB_CATEGORY'],
             'Market': row['MARKET'],
-            'Store': row['ONLINE_STORE']
+            'Store': row['ONLINE_STORE'],
+            'Dimension7': row['DIMENSION7'],
+            'Dimension8': row['DIMENSION8']
         }, ignore_index=True)
 
 for index, row in summary.iterrows():
-    total = 0
     for dic in row['Report Date']:
         for k, v in dic.items():
-            if v == availability_status:
-                total += 1
-    row['Availability'] = total
+            if v == "In Stock":
+                row['In Stock'] += 1
+            elif v == "Out of Stock":
+                row['Out of Stock'] += 1
+            else:
+                row['Not Listed'] += 1
 
+del summary['Report Date']
 summary.to_csv('adv2.csv')
