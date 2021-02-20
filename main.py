@@ -1,35 +1,60 @@
 import pandas as pd
+import datetime
 
-filename = ""
-chnksize = 5000
-necessary_attr = ['TRUSTED_PRODUCT_DESCRIPTION',
-                  'SUB_CATEGORY',
-                  'ONLINE_STORE',
-                  'DIMENSION7',
-                  'DIMENSION8']
-extra_attr = [
-                  'TRUSTED_RPC',
-                  'MARKET',
-                  'AVAILABILITY',
-                  'REPORT_DATE'
-]
+chunksize = 100000
+availability_status = "In Stock" # or "Out of Stock", or "Not Listed", etc.
+filename = 'small_sample.csv'
 
-dframe = pd.read_csv(filename, chunksize=chnksize)
-summary_table = pd.DataFrame(columns=[necessary_attr, extra_attr])
+chunks = pd.read_csv(filename, chunksize=chunksize)
+summary = pd.DataFrame(columns=['ID', 'Report Date', 'Last Available', 'Availability', 'Title', 'RPC', 'Market', 'Store'])
 
-for chunk in dframe:
-    summary_table.concat(dframe.filter([necessary_attr, extra_attr]), ignore_index=True)
+for chunk in chunks:
+    for index, row in chunk.iterrows():
+        ID = str(row['TRUSTED_RPC']) + '-' + row['ONLINE_STORE'] + '-' + row['MARKET']
 
-summary_table['NEW_ID'] = summary_table['TRUSTED_RPC'].str.cat(summary_table[['ONLINE_STORE', 'MARKET']].values, sep='-')
-summary_table['REPORT_DATE'] = pd.to_datetime(summary_table['REPORT_DATE'])
-summary_table = summary_table.sort_values(['NEW_ID', 'REPORT_DATE'])
-new_ids = list(summary_table['NEW_ID'].unique())
+        if ID in summary['ID'].values:
+            r = summary.loc[summary['ID'] == ID]
+            dates = r['Report Date'].values[0]
+            dates.append({
+                'date': row['REPORT_DATE'],
+                'availability': row['AVAILABILITY']
+            })
+            row['Report Date'] = dates
 
-for ids in new_ids:
-#    not_listed = dict(summary_table['AVAILABILITY'].value_counts())
-    summary_table.drop_duplicates(subset= ['NEW_ID'], keep='last')
+            if row['AVAILABILITY'] == "In Stock":
+                if (r['Last Available'].values[0] == "") or (datetime.datetime.strptime(r['Last Available'].values[0], '%Y-%m-%d') < \
+                        datetime.datetime.strptime(row['REPORT_DATE'], '%Y-%m-%d')):
+                    r['Last Available'].values[0] = row['REPORT_DATE']
+            #elif row['AVAILABILITY'] == "Out of Stock":
 
-summary_table.reset_index(inplace =True)
-del summary_table['index']
+            summary.loc[summary['ID'] == ID] = r
 
+        else:
+            la = ""
+            if row['AVAILABILITY'] == "In Stock":
+                la = row['REPORT_DATE']
+            summary = summary.append({
+            'ID': ID,
+            'Report Date': [
+                {
+                    'date': row['REPORT_DATE'],
+                    'availability': row['AVAILABILITY']
+                }
+            ],
+            'Last Available': la,
+            'Availability': 0,
+            'Title': row['TRUSTED_PRODUCT_DESCRIPTION'],
+            'RPC': row['TRUSTED_RPC'],
+            'Market': row['MARKET'],
+            'Store': row['ONLINE_STORE']
+        }, ignore_index=True)
 
+for index, row in summary.iterrows():
+    total = 0
+    for dic in row['Report Date']:
+        for k, v in dic.items():
+            if v == availability_status:
+                total += 1
+    row['Availability'] = total
+
+summary.to_csv('adv2.csv')
